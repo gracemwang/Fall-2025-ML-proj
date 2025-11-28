@@ -3,7 +3,7 @@
 #SBATCH --partition=cmist_condo
 #SBATCH --gres=gpu:1
 #SBATCH --account=doriancl
-#SBATCH --time=00:01:00
+#SBATCH --time=05:00:00
 
 ##SBATCH --mail-user=doriancl@andrew.cmu.edu
 ##SBATCH --mail-type=END,FAIL
@@ -13,4 +13,4 @@
 cd /home/export/doriancl/code/Fall-2025-ML-proj
 source .venv/bin/activate
 
-python baseline/baseline_server.py
+srun python baseline/baseline_server.py
