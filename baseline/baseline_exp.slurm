@@ -1,6 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=baseline_exp
 #SBATCH --partition=cmist_condo
+#SBATCH --cpus-per-task 32
+#SBATCH --mem-per-cpu 4G
 #SBATCH --gres=gpu:1
 #SBATCH --account=doriancl
 #SBATCH --time=05:00:00
