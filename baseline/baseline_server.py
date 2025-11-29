@@ -18,7 +18,8 @@ languages = {
     'deu': 'German',
     'ita': 'Italian',
     'jpn': 'Japanese',
-    'tur': 'Turkey'
+    'tur': 'Turkey',
+    'ben': 'Bengali',
 }
 
 python_path = "/home/export/doriancl/code/Fall-2025-ML-proj/.venv/bin/python"
@@ -144,6 +145,8 @@ async def run_batch(
         submit_bar.close()
         recv_bar.close()
         await client.close()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # --- WRITE CSV ---
     with output_path.open("w", newline="", encoding="utf-8") as f_out:

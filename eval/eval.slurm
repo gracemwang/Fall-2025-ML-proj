@@ -5,16 +5,12 @@
 #SBATCH --mem-per-cpu 4G
 #SBATCH --gres=gpu:1
 #SBATCH --account=doriancl
-#SBATCH --time=06:00:00
-#SBATCH --array=0 #0-5           # 6 jobs: IDs 0,1,2,3,4,5
+#SBATCH --time=02:00:00
+#SBATCH --array=0-6
 #SBATCH --output=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.out
 
-#SBATCH --mail-user=doriancl@andrew.cmu.edu
-#SBATCH --mail-type=END,FAIL
-
 # Define your sweep values here
-#LANGS=("ber" "cmn" "deu" "ita" "jpn" "tur" "fra")
-LANGS=("fra")
+LANGS=("ber" "cmn" "deu" "ita" "jpn" "tur" "fra")
 
 LANG=${LANGS[$SLURM_ARRAY_TASK_ID]}
 
@@ -23,6 +19,5 @@ source .venv/bin/activate
 
 echo "Task $SLURM_ARRAY_TASK_ID: lang=$LANG"
 
-srun python baseline/baseline_server.py \
-  --language "$LANG" \
-  --model "Qwen/Qwen3-14B"
+srun python eval/score_translations.py \
+  --language "$LANG"
