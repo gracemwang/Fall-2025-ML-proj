@@ -25,7 +25,7 @@ languages = {
 python_path = "/home/export/doriancl/code/Fall-2025-ML-proj/.venv/bin/python"
 
 
-def create_prompts(dataset: Path, n_samples: int | None = None, target_lang: str = "French"):
+def create_prompts(dataset: Path, prompt_type: str, n_samples: int | None = None, target_lang: str = "French"):
     """
     Read the CSV, take the first n_samples rows, and create prompts.
     Returns a list of dicts: {english, reference, prompt}.
@@ -45,11 +45,21 @@ def create_prompts(dataset: Path, n_samples: int | None = None, target_lang: str
             if not english:
                 continue
 
-            prompt = (
-                f"Translate the following English sentence into {target_lang}. "
-                "Respond with only the translation, no explanations:\n\n"
-                f"{english}"
-            )
+            if prompt_type == 'oneshot':
+                prompt = (
+                    f"Translate the following English sentence into {target_lang}. "
+                    "Also rate your confidence in your translation from 0 to 1. "
+                    "Respond with only the translation and confidence in JSON format: "
+                    "{'translation': YOUR CONTENT, 'confidence': YOUR CONFIDENCE}. "
+                    "Do not provide any explanations:\n\n"
+                    f"{english}"
+                )
+            else:
+                prompt = (
+                    f"Translate the following English sentence into {target_lang}. "
+                    "Respond with only the translation, no explanations:\n\n"
+                    f"{english}"
+                )
 
             samples.append(
                 {
@@ -85,7 +95,9 @@ async def run_batch(
         target_language: str,
         port,
         model,
-        max_concurrent: int = 512, n_samples: int | None = None):
+        prompt_type,
+        max_concurrent: int = 512,
+        n_samples: int | None = None):
     """
     Run n_samples translations with bounded concurrency.
     max_concurrent controls how many HTTP requests are in flight at once.
@@ -100,7 +112,7 @@ async def run_batch(
         api_key="None",
     )
 
-    samples = create_prompts(dataset_path, n_samples=n_samples, target_lang=target_language)
+    samples = create_prompts(dataset_path, n_samples=n_samples, target_lang=target_language, prompt_type=prompt_type)
 
     # Storage for responses aligned with samples by index
     responses = [None] * len(samples)
@@ -170,7 +182,8 @@ async def run_batch(
     )
 
 
-async def amain(language: str, server_process, port, model: str):
+async def amain(language: str, server_process, port, model: str, max_concurrent: int,
+                prompt_type: str):
     # --- config for this experiment ---
     # dataset_path = Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}.csv")
     # output_path = Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}_ai_translations.csv")
@@ -180,13 +193,14 @@ async def amain(language: str, server_process, port, model: str):
 
     config = {
         'dataset_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}.csv"),
-        'output_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/output/{model.lower()}/{language}_ai_translations.csv"),
+        'output_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/output/{model.lower()}/oneshot/{language}_ai_translations.csv"),
 
         # Change this to whatever language you want the model to translate into
         'target_language': languages[language],  # e.g. "French", "German", "Spanish", etc.
-        'max_concurrent': 512,
+        'max_concurrent': max_concurrent,
         'port': port,
         'model': model,
+        'prompt_type': prompt_type,
     }
 
     print(f"Doing translations with config:\n\n{config}")
@@ -202,6 +216,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--language', type=str)
     parser.add_argument('--model', type=str, default='qwen/qwen2.5-0.5b-instruct')
+    parser.add_argument('--max_concurrent', '-C', type=int, default=512)
+    parser.add_argument('--prompt-type', '-T', type=str, choices=['simple', 'oneshot'], default='simple')
 
     args = parser.parse_args()
 
@@ -210,4 +226,6 @@ if __name__ == "__main__":
     asyncio.run(amain(language=args.language,
                       server_process=server_process,
                       port=port,
-                      model=args.model))
+                      model=args.model,
+                      max_concurrent=args.max_concurrent,
+                      prompt_type=args.prompt_type))
