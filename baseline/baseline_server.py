@@ -83,6 +83,7 @@ async def run_batch(
         dataset_path: str, output_path: str,
         target_language: str,
         port,
+        model,
         max_concurrent: int = 512, n_samples: int | None = None):
     """
     Run n_samples translations with bounded concurrency.
@@ -119,7 +120,7 @@ async def run_batch(
             submit_bar.update(1)
             try:
                 resp = await client.chat.completions.create(
-                    model="qwen/qwen2.5-0.5b-instruct",
+                    model=model,
                     messages=[{"role": "user", "content": sample["prompt"]}],
                     temperature=0,
                     max_tokens=128,
@@ -180,9 +181,12 @@ async def amain(language: str, server_process, port, model: str):
 
         # Change this to whatever language you want the model to translate into
         'target_language': languages[language],  # e.g. "French", "German", "Spanish", etc.
-        'max_concurrent': 1024,
+        'max_concurrent': 512,
         'port': port,
+        'model': model,
     }
+
+    print(f"Doing translations with config:\n\n{config}")
 
     try:
         await run_batch(**config)
