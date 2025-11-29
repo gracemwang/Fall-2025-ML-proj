@@ -1,3 +1,5 @@
+import argparse
+
 from sglang.test.doc_patch import launch_server_cmd
 from sglang.utils import wait_for_server, print_highlight, terminate_process
 
@@ -7,18 +9,22 @@ from pathlib import Path
 import csv
 from tqdm.asyncio import tqdm_asyncio
 from tqdm import tqdm
+import logging
+
+languages = {
+    'fra': 'French',
+    'ber': 'Berber',
+    'cmn': 'Mandarin Chinese',
+    'deu': 'German',
+    'ita': 'Italian',
+    'jpn': 'Japanese',
+    'tur': 'Turkey'
+}
 
 python_path = "/home/export/doriancl/code/Fall-2025-ML-proj/.venv/bin/python"
 
-# --- config for this experiment ---
-dataset_path = Path("/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/fra.csv")
-output_path = Path("/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/fra_ai_translations_2.csv")
 
-# Change this to whatever language you want the model to translate into
-target_language = "French"  # e.g. "French", "German", "Spanish", etc.
-
-
-def create_prompts(dataset: Path, n_samples: int = 1000, target_lang: str = "French"):
+def create_prompts(dataset: Path, n_samples: int | None = None, target_lang: str = "French"):
     """
     Read the CSV, take the first n_samples rows, and create prompts.
     Returns a list of dicts: {english, reference, prompt}.
@@ -29,7 +35,7 @@ def create_prompts(dataset: Path, n_samples: int = 1000, target_lang: str = "Fre
     with dataset.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if len(samples) >= n_samples:
+            if n_samples and len(samples) >= n_samples:
                 break
 
             english = (row.get("English") or "").strip()
@@ -59,23 +65,34 @@ def create_prompts(dataset: Path, n_samples: int = 1000, target_lang: str = "Fre
     return samples
 
 
-# --- launch the sglang server (same as before) ---
-server_process, port = launch_server_cmd(
-    f"""
-{python_path} -m sglang.launch_server --model-path qwen/qwen2.5-0.5b-instruct \
- --host 0.0.0.0 --log-level warning
-"""
-)
+def launch_server(model: str) -> tuple:
+    # launch the sglang server
+    server_process, port = launch_server_cmd(
+        f"""
+    {python_path} -m sglang.launch_server --model-path {model} \
+     --host 0.0.0.0 --log-level warning
+    """
+    )
 
-wait_for_server(f"http://localhost:{port}")
-print_highlight(f"SGLang server is up on port {port}")
+    wait_for_server(f"http://localhost:{port}")
+    print_highlight(f"SGLang server is up on port {port}")
+    return server_process, port
 
-async def run_batch(n_samples: int, max_concurrent: int = 512):
+
+async def run_batch(
+        dataset_path: str, output_path: str,
+        target_language: str,
+        port,
+        max_concurrent: int = 512, n_samples: int | None = None):
     """
     Run n_samples translations with bounded concurrency.
     max_concurrent controls how many HTTP requests are in flight at once.
     Higher -> more batching & throughput; too high -> possible OOM / timeouts.
     """
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     client = openai.AsyncClient(
         base_url=f"http://127.0.0.1:{port}/v1",
         api_key="None",
@@ -149,14 +166,41 @@ async def run_batch(n_samples: int, max_concurrent: int = 512):
     )
 
 
-async def amain():
-    num_samples = 200_000  # or 200_000 or whatever you want
+async def amain(language: str, server_process, port, model: str):
+    # --- config for this experiment ---
+    # dataset_path = Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}.csv")
+    # output_path = Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}_ai_translations.csv")
+    #
+    # # Change this to whatever language you want the model to translate into
+    # target_language = languages[language]  # e.g. "French", "German", "Spanish", etc.
+
+    config = {
+        'dataset_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}.csv"),
+        'output_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/output/{model.lower()}/{language}_ai_translations.csv"),
+
+        # Change this to whatever language you want the model to translate into
+        'target_language': languages[language],  # e.g. "French", "German", "Spanish", etc.
+        'max_concurrent': 1024,
+        'port': port,
+    }
+
     try:
-        await run_batch(num_samples, max_concurrent=1024)
+        await run_batch(**config)
     finally:
         # Make sure we shut down the server process
         terminate_process(server_process)
 
 
 if __name__ == "__main__":
-    asyncio.run(amain())
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--language', type=str)
+    parser.add_argument('--model', type=str, default='qwen/qwen2.5-0.5b-instruct')
+
+    args = parser.parse_args()
+
+    server_process, port = launch_server(args.model)
+
+    asyncio.run(amain(language=args.language,
+                      server_process=server_process,
+                      port=port,
+                      model=args.model))
