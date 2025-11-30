@@ -90,12 +90,54 @@ def launch_server(model: str) -> tuple:
     return server_process, port
 
 
+def write_csv(output_path: Path,
+              samples,
+              responses,
+              second_responses,
+              prompt_type: str):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if prompt_type == 'simple':
+        with output_path.open("w", newline="", encoding="utf-8") as f_out:
+            fieldnames = ["English", "AI_Translation", "AI_Confidence", "Original_Translation" ]
+            writer = csv.DictWriter(f_out, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for sample, resp1, resp2 in zip(samples, responses, second_responses):
+                ai_text = resp1.choices[0].message.content.strip() if resp1 else "[ERROR]"
+                ai_conf = resp2.choices[0].message.content.strip() if resp2 else "[ERROR]"
+                writer.writerow(
+                    {
+                        "English": sample["english"],
+                        "AI_Translation": ai_text,
+                        "AI_Confidence": ai_conf,
+                        "Original_Translation": sample["reference"],
+                    }
+                )
+    else:
+        with output_path.open("w", newline="", encoding="utf-8") as f_out:
+            fieldnames = ["English", "AI_Translation", "Original_Translation"]
+            writer = csv.DictWriter(f_out, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for sample, resp in zip(samples, responses):
+                ai_text = resp.choices[0].message.content.strip() if resp else "[ERROR]"
+                writer.writerow(
+                    {
+                        "English": sample["english"],
+                        "AI_Translation": ai_text,
+                        "Original_Translation": sample["reference"],
+                    }
+                )
+
+
 async def run_batch(
-        dataset_path: str, output_path: str,
+        dataset_path: Path, output_path: Path,
         target_language: str,
         port,
         model,
         prompt_type,
+        thinking: bool,
         max_concurrent: int = 512,
         n_samples: int | None = None):
     """
@@ -116,6 +158,7 @@ async def run_batch(
 
     # Storage for responses aligned with samples by index
     responses = [None] * len(samples)
+    second_responses = [None] * len(samples)
 
     # Semaphore to bound concurrency
     sem = asyncio.Semaphore(max_concurrent)
@@ -132,12 +175,35 @@ async def run_batch(
         async with sem:
             submit_bar.update(1)
             try:
+                messages = [{"role": "user", "content": sample["prompt"]}]
+
                 resp = await client.chat.completions.create(
                     model=model,
-                    messages=[{"role": "user", "content": sample["prompt"]}],
                     temperature=0,
                     max_tokens=128,
+                    extra_body={
+                        "chat_template_kwargs": {"enable_thinking": thinking},
+                        "separate_reasoning": True
+                    },
+                    messages = messages,
                 )
+
+                if prompt_type == 'simple':
+                    messages.append({"role": "assistant", "content": resp.choices[0].message.content})
+                    messages.append({"role": "user",
+                                     "content": "What is your confidence in that translation, from 0 to 1? Do not provide any explanations."})
+                    resp2 = await client.chat.completions.create(
+                        model=model,
+                        temperature=0,
+                        max_tokens=128,
+                        extra_body={
+                            "chat_template_kwargs": {"enable_thinking": thinking},
+                            "separate_reasoning": True
+                        },
+                        messages = messages,
+                    )
+                    second_responses[i] = resp2
+
             except Exception as e:
                 print(f"Error in request {i}: {e}")
                 resp = None
@@ -158,23 +224,11 @@ async def run_batch(
         recv_bar.close()
         await client.close()
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # --- WRITE CSV ---
-    with output_path.open("w", newline="", encoding="utf-8") as f_out:
-        fieldnames = ["English", "AI_Translation", "Original_Translation"]
-        writer = csv.DictWriter(f_out, fieldnames=fieldnames)
-        writer.writeheader()
-
-        for sample, resp in zip(samples, responses):
-            ai_text = resp.choices[0].message.content.strip() if resp else "[ERROR]"
-            writer.writerow(
-                {
-                    "English": sample["english"],
-                    "AI_Translation": ai_text,
-                    "Original_Translation": sample["reference"],
-                }
-            )
+    write_csv(output_path=output_path,
+              samples=samples,
+              responses=responses,
+              second_responses=second_responses,
+              prompt_type=prompt_type)
 
     print_highlight(
         f"Done! Wrote {len(samples)} rows to {output_path} "
@@ -182,25 +236,20 @@ async def run_batch(
     )
 
 
-async def amain(language: str, server_process, port, model: str, max_concurrent: int,
-                prompt_type: str):
-    # --- config for this experiment ---
-    # dataset_path = Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}.csv")
-    # output_path = Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}_ai_translations.csv")
-    #
-    # # Change this to whatever language you want the model to translate into
-    # target_language = languages[language]  # e.g. "French", "German", "Spanish", etc.
+async def amain(language: str, server_process, port, model: str, **kwargs):
+    data_dir = Path("/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba")
+    think_mode = "CoT" if kwargs["thinking"] else "Basic"
 
+    # Config for this experiment
     config = {
-        'dataset_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/{language}.csv"),
-        'output_path': Path(f"/home/export/doriancl/code/Fall-2025-ML-proj/data/tatoeba/output/{model.lower()}/oneshot/{language}_ai_translations.csv"),
+        'dataset_path': data_dir / f"{language}.csv",
+        'output_path': data_dir / f"output/{model.lower()}/{think_mode}/{kwargs['prompt_type']}/{language}_ai_translations.csv",
 
         # Change this to whatever language you want the model to translate into
         'target_language': languages[language],  # e.g. "French", "German", "Spanish", etc.
-        'max_concurrent': max_concurrent,
         'port': port,
         'model': model,
-        'prompt_type': prompt_type,
+        **kwargs
     }
 
     print(f"Doing translations with config:\n\n{config}")
@@ -218,14 +267,12 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='qwen/qwen2.5-0.5b-instruct')
     parser.add_argument('--max_concurrent', '-C', type=int, default=512)
     parser.add_argument('--prompt-type', '-T', type=str, choices=['simple', 'oneshot'], default='simple')
+    parser.add_argument('--thinking', type=bool, default=False)
 
     args = parser.parse_args()
 
     server_process, port = launch_server(args.model)
 
-    asyncio.run(amain(language=args.language,
-                      server_process=server_process,
+    asyncio.run(amain(server_process=server_process,
                       port=port,
-                      model=args.model,
-                      max_concurrent=args.max_concurrent,
-                      prompt_type=args.prompt_type))
+                      **vars(args)))
