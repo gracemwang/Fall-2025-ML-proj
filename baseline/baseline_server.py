@@ -4,6 +4,7 @@ from sglang.test.doc_patch import launch_server_cmd
 from sglang.utils import wait_for_server, print_highlight, terminate_process
 
 import asyncio
+import time
 import openai
 from pathlib import Path
 import csv
@@ -45,7 +46,7 @@ def create_prompts(dataset: Path, prompt_type: str, n_samples: int | None = None
             if not english:
                 continue
 
-            if prompt_type == 'oneshot':
+            if prompt_type == 'monolithic':
                 prompt = (
                     f"Translate the following English sentence into {target_lang}. "
                     "Also rate your confidence in your translation from 0 to 1. "
@@ -80,7 +81,7 @@ def launch_server(model: str) -> tuple:
     # launch the sglang server
     server_process, port = launch_server_cmd(
         f"""
-    {python_path} -m sglang.launch_server --model-path {model} \
+    {python_path} -m sglang.launch_server --model {model} --reasoning-parser qwen3 \
      --host 0.0.0.0 --log-level warning
     """
     )
@@ -97,15 +98,20 @@ def write_csv(output_path: Path,
               prompt_type: str):
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if prompt_type == 'simple':
+    if prompt_type == 'iterative':
         with output_path.open("w", newline="", encoding="utf-8") as f_out:
             fieldnames = ["English", "AI_Translation", "AI_Confidence", "Original_Translation" ]
             writer = csv.DictWriter(f_out, fieldnames=fieldnames)
             writer.writeheader()
+            first = True
 
             for sample, resp1, resp2 in zip(samples, responses, second_responses):
-                ai_text = resp1.choices[0].message.content.strip() if resp1 else "[ERROR]"
-                ai_conf = resp2.choices[0].message.content.strip() if resp2 else "[ERROR]"
+                if first:
+                    print(resp1)
+                    print(resp2)
+                    first = False
+                ai_text = resp1.choices[0].message.content.strip() if resp1 and resp1.choices[0].message.content else "[ERROR]"
+                ai_conf = resp2.choices[0].message.content.strip() if resp2 and resp2.choices[0].message.content else "[ERROR]"
                 writer.writerow(
                     {
                         "English": sample["english"],
@@ -119,9 +125,13 @@ def write_csv(output_path: Path,
             fieldnames = ["English", "AI_Translation", "Original_Translation"]
             writer = csv.DictWriter(f_out, fieldnames=fieldnames)
             writer.writeheader()
+            first = True
 
             for sample, resp in zip(samples, responses):
-                ai_text = resp.choices[0].message.content.strip() if resp else "[ERROR]"
+                if first:
+                    print(resp)
+                    first = False
+                ai_text = resp.choices[0].message.content.strip() if resp and resp.choices[0].message.content else "[ERROR]"
                 writer.writerow(
                     {
                         "English": sample["english"],
@@ -166,6 +176,7 @@ async def run_batch(
     # Progress bars
     submit_bar = tqdm(total=len(samples), desc="Submitting requests")
     recv_bar = tqdm(total=len(samples), desc="Receiving responses")
+    times = []
 
     async def worker(i: int, sample: dict):
         """
@@ -174,13 +185,17 @@ async def run_batch(
         """
         async with sem:
             submit_bar.update(1)
+            start = time.perf_counter()
             try:
                 messages = [{"role": "user", "content": sample["prompt"]}]
 
+                temp = 0.6
+                max_tokens = 1280 if thinking else 256
+
                 resp = await client.chat.completions.create(
                     model=model,
-                    temperature=0,
-                    max_tokens=128,
+                    temperature=temp,
+                    max_tokens=max_tokens,
                     extra_body={
                         "chat_template_kwargs": {"enable_thinking": thinking},
                         "separate_reasoning": True
@@ -188,14 +203,14 @@ async def run_batch(
                     messages = messages,
                 )
 
-                if prompt_type == 'simple':
+                if prompt_type == 'iterative':
                     messages.append({"role": "assistant", "content": resp.choices[0].message.content})
                     messages.append({"role": "user",
                                      "content": "What is your confidence in that translation, from 0 to 1? Do not provide any explanations."})
                     resp2 = await client.chat.completions.create(
                         model=model,
-                        temperature=0,
-                        max_tokens=128,
+                        temperature=temp,
+                        max_tokens=max_tokens,
                         extra_body={
                             "chat_template_kwargs": {"enable_thinking": thinking},
                             "separate_reasoning": True
@@ -207,9 +222,11 @@ async def run_batch(
             except Exception as e:
                 print(f"Error in request {i}: {e}")
                 resp = None
+            end = time.perf_counter()
 
             responses[i] = resp
             recv_bar.update(1)
+            times.append(end - start)
 
     # Create all tasks at once; semaphore enforces true concurrency cap
     tasks = [
@@ -232,7 +249,8 @@ async def run_batch(
 
     print_highlight(
         f"Done! Wrote {len(samples)} rows to {output_path} "
-        f"(English, AI_Translation, Original_Translation)."
+        f"(English, AI_Translation, Original_Translation).\n"
+        f"Avg completion time: {sum(times) / len(times):.4f} seconds."
     )
 
 
@@ -264,10 +282,11 @@ async def amain(language: str, server_process, port, model: str, **kwargs):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--language', type=str)
-    parser.add_argument('--model', type=str, default='qwen/qwen2.5-0.5b-instruct')
+    parser.add_argument('--model', type=str, default='Qwen/Qwen3-1.7B')
     parser.add_argument('--max_concurrent', '-C', type=int, default=512)
-    parser.add_argument('--prompt-type', '-T', type=str, choices=['simple', 'oneshot'], default='simple')
-    parser.add_argument('--thinking', type=bool, default=False)
+    parser.add_argument('--prompt-type', '-T', type=str, choices=['iterative', 'monolithic'], default='iterative')
+    parser.add_argument('--thinking', type=lambda x: x.lower() == 'true', default=False)
+    parser.add_argument('--n_samples', type=int)
 
     args = parser.parse_args()
 
