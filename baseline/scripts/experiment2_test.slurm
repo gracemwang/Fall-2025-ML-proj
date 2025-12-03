@@ -9,8 +9,8 @@
 #SBATCH --array=0-3
 #SBATCH --output=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.out
 
-#SBATCH --mail-user=doriancl@andrew.cmu.edu
-#SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=doriancl@andrew.cmu.edu
+##SBATCH --mail-type=END,FAIL
 
 task_id=${SLURM_ARRAY_TASK_ID}
 
@@ -33,7 +33,7 @@ echo "Task $SLURM_ARRAY_TASK_ID: prompt=$PTYPE"
 srun python baseline/baseline_server.py \
   --language "ben" \
   --prompt-type "$PTYPE" \
-  --model Qwen/Qwen3-14B \
+  --model Qwen/Qwen3-1.7B \
   --max_concurrent "768" \
   --thinking "$THINK" \
   --n_samples 100

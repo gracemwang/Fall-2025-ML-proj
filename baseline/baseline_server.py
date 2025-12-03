@@ -11,6 +11,7 @@ import csv
 from tqdm.asyncio import tqdm_asyncio
 from tqdm import tqdm
 import logging
+import numpy as np
 
 languages = {
     'fra': 'French',
@@ -32,47 +33,58 @@ def create_prompts(dataset: Path, prompt_type: str, n_samples: int | None = None
     Returns a list of dicts: {english, reference, prompt}.
     Assumes headers: English,Translation
     """
-    samples = []
+    rows = []
 
+    # First: read and filter rows into memory
     with dataset.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if n_samples and len(samples) >= n_samples:
-                break
-
             english = (row.get("English") or "").strip()
             reference = (row.get("Translation") or "").strip()
 
             if not english:
                 continue
 
-            if prompt_type == 'monolithic':
-                prompt = (
-                    f"Translate the following English sentence into {target_lang}. "
-                    "Also rate your confidence in your translation from 0 to 1. "
-                    "Respond with only the translation and confidence in JSON format: "
-                    "{'translation': YOUR CONTENT, 'confidence': YOUR CONFIDENCE}. "
-                    "Do not provide any explanations:\n\n"
-                    f"{english}"
-                )
-            else:
-                prompt = (
-                    f"Translate the following English sentence into {target_lang}. "
-                    "Respond with only the translation, no explanations:\n\n"
-                    f"{english}"
-                )
+            rows.append((english, reference))
 
-            samples.append(
-                {
-                    "english": english,
-                    "reference": reference,
-                    "prompt": prompt,
-                }
+    # Now rows contains only the usable rows
+    N = len(rows)
+
+    if n_samples is None or n_samples >= N:
+        # Just use everything (no sampling needed)
+        chosen_indices = np.arange(N)
+    else:
+        # Random sample of row indices without replacement
+        chosen_indices = np.random.choice(N, size=n_samples, replace=False)
+
+    samples = []
+
+    for i in chosen_indices:
+        english, reference = rows[i]
+
+        if prompt_type == 'monolithic':
+            prompt = (
+                f"Translate the following English sentence into {target_lang}. "
+                "Also rate your confidence in your translation from 0 to 1. "
+                "Respond with only the translation and confidence in JSON format: "
+                "{'translation': YOUR CONTENT, 'confidence': YOUR CONFIDENCE}. "
+                "Do not provide any explanations:\n\n"
+                f"{english}"
+            )
+        else:
+            prompt = (
+                f"Translate the following English sentence into {target_lang}. "
+                "Respond with only the translation, no explanations:\n\n"
+                f"{english}"
             )
 
-    # If you *require* exactly 1000, you can assert here:
-    if len(samples) != n_samples:
-        print_highlight(f"Warning: only found {len(samples)} samples (requested {n_samples}).")
+        samples.append(
+            {
+                "english": english,
+                "reference": reference,
+                "prompt": prompt,
+            }
+        )
 
     return samples
 
@@ -261,7 +273,7 @@ async def amain(language: str, server_process, port, model: str, **kwargs):
     # Config for this experiment
     config = {
         'dataset_path': data_dir / f"{language}.csv",
-        'output_path': data_dir / f"output/{model.lower()}/{think_mode}/{kwargs['prompt_type']}/{language}_ai_translations.csv",
+        'output_path': data_dir / f"output/{model.lower()}/randomized/{think_mode}/{kwargs['prompt_type']}/{language}_ai_translations.csv",
 
         # Change this to whatever language you want the model to translate into
         'target_language': languages[language],  # e.g. "French", "German", "Spanish", etc.
@@ -270,7 +282,7 @@ async def amain(language: str, server_process, port, model: str, **kwargs):
         **kwargs
     }
 
-    print(f"Doing translations with config:\n\n{config}")
+    print(f"\nDoing translations with config:\n{config}\n\n\n")
 
     try:
         await run_batch(**config)

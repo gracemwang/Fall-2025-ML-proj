@@ -6,13 +6,12 @@
 #SBATCH --gres=gpu:1
 #SBATCH --account=doriancl
 #SBATCH --time=6:00:00
-#SBATCH --array=0-13
 #SBATCH --output=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.out
 
 #SBATCH --mail-user=doriancl@andrew.cmu.edu
 #SBATCH --mail-type=END,FAIL
 
-task_id=${SLURM_ARRAY_TASK_ID}
+task_id=12
 
 # Define your sweep values here
 LANGS=("ber" "cmn" "deu" "ita" "jpn" "tur" "fra")
@@ -30,7 +29,7 @@ PTYPE=${PTYPES[$j]}
 cd /home/export/doriancl/code/Fall-2025-ML-proj || exit 0
 source .venv/bin/activate
 
-echo "Task $SLURM_ARRAY_TASK_ID: lang=$LANG"
+echo "Task 12 rerun: lang=$LANG"
 
 srun python baseline/baseline_server.py \
   --language "$LANG" \

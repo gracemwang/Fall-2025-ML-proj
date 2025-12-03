@@ -38,4 +38,4 @@ srun python baseline/baseline_server.py \
   --model "Qwen/Qwen3-14B" \
   --max_concurrent "768" \
   --thinking true \
-  --n_samples 45000
+  --n_samples 50000
