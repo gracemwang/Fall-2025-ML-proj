@@ -1,0 +1,18 @@
+/home/export/doriancl/code/Fall-2025-ML-proj/.venv/lib/python3.10/site-packages/torchmetrics/utilities/imports.py:23: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import DistributionNotFound, get_distribution
+Traceback (most recent call last):
+  File "/home/export/doriancl/code/Fall-2025-ML-proj/eval/score_translations.py", line 301, in <module>
+    evaluate_translations(**vars(args))
+  File "/home/export/doriancl/code/Fall-2025-ML-proj/eval/score_translations.py", line 274, in evaluate_translations
+    df, info = preprocess(df, **kwargs)
+  File "/home/export/doriancl/code/Fall-2025-ML-proj/eval/score_translations.py", line 125, in preprocess
+    malformatted_json = df[['AI_Translation', 'Confidence']].isna().any(axis=1).sum()
+  File "/home/export/doriancl/code/Fall-2025-ML-proj/.venv/lib/python3.10/site-packages/pandas/core/frame.py", line 4119, in __getitem__
+    indexer = self.columns._get_indexer_strict(key, "columns")[1]
+  File "/home/export/doriancl/code/Fall-2025-ML-proj/.venv/lib/python3.10/site-packages/pandas/core/indexes/base.py", line 6212, in _get_indexer_strict
+    self._raise_if_missing(keyarr, indexer, axis_name)
+  File "/home/export/doriancl/code/Fall-2025-ML-proj/.venv/lib/python3.10/site-packages/pandas/core/indexes/base.py", line 6264, in _raise_if_missing
+    raise KeyError(f"{not_found} not in index")
+KeyError: "['Confidence'] not in index"
+srun: error: n02: task 0: Exited with exit code 1
+srun: launch/slurm: _step_signal: Terminating StepId=22975.0

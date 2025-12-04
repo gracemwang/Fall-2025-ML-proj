@@ -3,10 +3,8 @@
 
 ## Getting Started
 
-1. Install your favorite conda-flavored package manager. [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) may be a good choice.
-2. Create the environment: `mamba create -f path/to/repo/environment.yaml`
-   - Note this uses Python 3.14 (3.9 is necessary for Gradescope, but is a pain 😤)
-3. Activate the environment!! `mamba activate 701-proj`
+1. Conda is outdated. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
+2. Update the uv project: `$ uv sync`
 
 ## Preprocessing Tatoeba data
 
