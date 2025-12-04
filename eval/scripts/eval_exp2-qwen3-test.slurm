@@ -8,6 +8,8 @@
 #SBATCH --time=1:00:00
 #SBATCH --array=0 # 0-13
 #SBATCH --output=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.out
+#SBATCH --error=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.err
+
 
 #SBATCH --mail-user=doriancl@andrew.cmu.edu
 #SBATCH --mail-type=END,FAIL
