@@ -3,7 +3,7 @@ name = "fall-2025-ml-proj"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = "==3.12.*"
 dependencies = [
     "ipykernel>=7.1.0",
     "ipython>=9.7.0",
@@ -19,6 +19,8 @@ dependencies = [
     "huggingface_hub",
     "unbabel-comet>=2.2.7",
     "openai>=2.8.1",
+    "notebook>=7.5.0",
+    "pandas-stubs==2.3.3.251201",
 ]
 
 [tool.uv.sources]
