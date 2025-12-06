@@ -1,5 +1,8 @@
 # Fall-2025-ML-proj
 
+A project exploring the calibration of large language models.
+
+![Calibration observations of Qwen3 on seven languages.](figures/Qwen3 both sizes_Basic_all_agg.png)
 
 ## Getting Started
 
