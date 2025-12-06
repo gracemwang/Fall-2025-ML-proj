@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=eval_test
+#SBATCH --job-name=eval_qwen3
 #SBATCH --partition=phil
 #SBATCH --cpus-per-task 30
 #SBATCH --mem-per-cpu 4G
 #SBATCH --gres=gpu:1
 #SBATCH --account=doriancl
-#SBATCH --time=0:05:00
+#SBATCH --time=0:30:00
 #SBATCH --array=0-55
 #SBATCH --output=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.out
 #SBATCH --error=/home/export/doriancl/code/Fall-2025-ML-proj/logs/%x-%A_%a.err
@@ -66,5 +66,6 @@ srun python eval/score_translations.py \
   --language "$LANG" \
   --prompt-type "$PROMPT" \
   --model "$MODEL" \
-  --thinking $THINK \
-  --n_samples 100
+  --thinking "$THINK" \
+  --max_concurrent 256 \
+#  --n_samples 10000

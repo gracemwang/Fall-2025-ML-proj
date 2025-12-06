@@ -98,8 +98,7 @@ def preprocess_monolith_output(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
     df = pd.concat([df.drop(columns=["AI_Translation"]),
                     pd.json_normalize(df["AI_Translation"])],
                    axis=1)
-    df = df.rename(columns={"translation": "AI_Translation", "confidence": "Confidence"})
-    print(df.columns)
+    df = df.rename(columns={"translation": "AI_Translation", "confidence": 'AI_Confidence'})
     return df
 
 
@@ -122,16 +121,15 @@ def preprocess(df: pd.DataFrame, **kwargs) -> tuple[pd.DataFrame, dict]:
     raw_size = df.shape[0]
 
     # Drop NaN that may have been created during JSON parsing.
-    malformatted_json = df[['AI_Translation', 'Confidence']].isna().any(axis=1).sum()
-    print(f"malformatted json: {malformatted_json}")
-    df = df.dropna(subset=['AI_Translation', 'Confidence'])
+    malformatted_json = df[['AI_Translation', 'AI_Confidence']].isna().any(axis=1).sum()
+    df = df.dropna(subset=['AI_Translation', 'AI_Confidence'])
 
     # Drop other NaN, if they exist for some reason
     other_nan = df.isna().any(axis=1).sum()
     df = df.dropna()
 
     # Coerce confiences to numeric. This will make NaN, which we drop.
-    df['Confidence'] = pd.to_numeric(df['Confidence'], errors='coerce')
+    df['AI_Confidence'] = pd.to_numeric(df['AI_Confidence'], errors='coerce')
     nan_confidences = df.isna().any(axis=1).sum()
     df = df.dropna()
 
@@ -269,7 +267,6 @@ def evaluate_translations(**kwargs):
 
     if kwargs['prompt_type'] == 'monolithic':
         df = preprocess_monolith_output(df, **kwargs)
-        print(df.columns)
 
     df, info = preprocess(df, **kwargs)
 

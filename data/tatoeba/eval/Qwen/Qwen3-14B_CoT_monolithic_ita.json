@@ -1,0 +1,6 @@
+{
+    "errors": 65,
+    "malformatted_json": 65,
+    "nan_confidences": 0,
+    "other_nan": 0
+}
